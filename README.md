@@ -40,3 +40,10 @@ pip install numpy pandas scipy matplotlib seaborn pulp prophet malloovia
 python explore_all_skus.py
 
 python baseline_lpp.py
+
+
+
+## Acknowledgements
+This project utilizes the **Shaved Ice** compute resource commitment dataset released by Snowflake researchers[cite: 6]. 
+- Original Paper: *Shaved Ice: Optimal Compute Resource Commitments for Dynamic Multi-Cloud Workloads* (ICPE '25).
+- Dataset Link: [Zenodo / GitHub Repository](https://github.com/Snowflake-Labs/shavedice-dataset)[cite: 6].
