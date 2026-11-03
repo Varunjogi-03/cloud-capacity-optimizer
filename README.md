@@ -16,7 +16,7 @@ This repository provides a simulation and optimization framework to:
 * SciPy (Numerical Optimization)
 * Prophet (Time-Series Forecasting)
 
-Follow these steps to set up and run the project on your local machine (Windows / macOS / Linux):
+Follow these steps to set up and run the project on your local machine 
 
 ### 1. Clone the Repository
 Open your terminal / command prompt and clone this repository:
@@ -40,7 +40,6 @@ pip install numpy pandas scipy matplotlib seaborn pulp prophet malloovia
 python explore_all_skus.py
 
 python baseline_lpp.py
-
 
 
 ## Acknowledgements
