@@ -6,12 +6,12 @@ import numpy as np
 df = pd.read_csv('dataset/hourly_normalized.csv.gz')
 series_data = df[(df['REGION_NUM'] == 2) & (df['INSTANCE_TYPE'] == 'A')]['NORM_USAGE'].values
 
-# Agar data kam se kam 168 hours (1 week) ka chahiye
+# 2. Define the number of hours to consider (1 week = 168 hours)
 hours = 168
 if len(series_data) >= hours:
     demand = series_data[:hours]
 else:
-    # Agar kam ho toh fallback synthetic
+    # If the series is shorter than 168 hours, we can repeat it to fill the week
     demand = np.resize(series_data, hours)
 
 # Prices
