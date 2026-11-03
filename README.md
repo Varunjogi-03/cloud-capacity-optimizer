@@ -22,19 +22,21 @@ Follow these steps to set up and run the project on your local machine (Windows 
 Open your terminal / command prompt and clone this repository:
 
 git clone "repo_url"
+
 cd cloud-commitment-simulator
 
-# Create virtual environment
+### 2. Create virtual environment
 python3.10 -m venv venv
 
-# Activate on Windows (PowerShell/CMD):
+### 3. Activate on Windows (PowerShell/CMD):
 venv\Scripts\activate
 
-# Install the Dependencies
+### 4. Install the Dependencies
 pip install --upgrade pip
+
 pip install numpy pandas scipy matplotlib seaborn pulp prophet malloovia
 
-# explore data
+### 5. explore data
 python explore_all_skus.py
 
 python baseline_lpp.py
