@@ -1,48 +1,49 @@
-# Cloud Commitment & Capacity Simulator
+# CloudCompass
 
-An open-source Python tool for optimizing multi-cloud virtual machine (VM) capacity commitments (Reserved Instances and Savings Plans) under demand uncertainty.
+Risk-aware cloud commitment and capacity simulator for a college project.
 
+CloudCompass turns an hourly workload trace into an explainable cloud-capacity recommendation. It combines a PuLP/CBC integer optimization model with forecast-error stress tests, staggered commitment ladders, off-peak scheduling, provider comparison, and bottleneck diagnostics.
 
-This repository provides a simulation and optimization framework to:
-* **Minimize Cloud Costs:** Uses linear programming (PuLP) to calculate the optimal mix of reserved and on-demand VMs based on real-world periodic workload traces.
-* **Mitigate Forecast Risk:** Evaluates how forecast errors and unexpected demand drops impact cloud bills.
-* **Analyze Bottlenecks:** Extracts dual values (shadow prices) to identify strict cloud provider limits and constraints.
-* **Time-Shifting & Laddering:** Simulates staggered commitment expirations and off-peak batch workload scheduling.
+## Why this version is distinctive
 
-## Tech Stack
-* Python 3.10 / 3.11
-* PuLP (CBC Solver)
-* Pandas & NumPy
-* SciPy (Numerical Optimization)
-* Prophet (Time-Series Forecasting)
+- **Risk budget instead of one fixed answer:** choose a risk posture from conservative to aggressive; the optimizer changes how much capacity it commits.
+- **Explainable recommendations:** every run produces a decision memo with the reason for the recommendation, not only a cost number.
+- **Commitment laddering:** commitments can start in different weeks and expire on separate schedules, reducing lock-in.
+- **Actionable bottlenecks:** quota pressure and hourly on-demand exposure are surfaced as named constraints.
+- **Offline-first demo:** the included workload generator creates a reproducible trace, so the project runs without private cloud data.
+- **Original “risk budget” workflow:** aggressive, balanced, and conservative profiles change the planned capacity buffer and the commitment ladder mix.
 
-Follow these steps to set up and run the project on your local machine 
+## Quick start
 
-### 1. Clone the Repository
-Open your terminal / command prompt and clone this repository:
+```bash
+python -m venv .venv
+.venv\\Scripts\\activate
+pip install -r requirements.txt
+python -m cloudcompass.cli --hours 168 --error 25 --risk balanced
+```
 
-git clone "repo_url"
+Optional dashboard:
 
-cd cloud-commitment-simulator
+```bash
+streamlit run cloudcompass/dashboard.py
+```
 
-### 2. Create virtual environment
-python3.10 -m venv venv
+The dashboard includes the assignment's seven forecast cases (-50%, -25%, -10%, 0%, +10%, +25%, +50%), a 4/8-week ladder switch, an off-peak scheduler, and a live decision memo.
 
-### 3. Activate on Windows (PowerShell/CMD):
-venv\Scripts\activate
+If CBC/PuLP is unavailable, the CLI uses a deterministic quantile-based fallback and clearly labels the run. Install the requirements for the full ILP formulation and solver diagnostics.
 
-### 4. Install the Dependencies
-pip install --upgrade pip
+## Project map
 
-pip install numpy pandas scipy matplotlib seaborn pulp prophet malloovia
+- `cloudcompass/data.py` - reproducible synthetic workload generation and validation
+- `cloudcompass/optimizer.py` - ILP model plus safe fallback
+- `cloudcompass/scenarios.py` - forecast error and strategy comparison
+- `cloudcompass/scheduler.py` - off-peak shifting of delay-tolerant work
+- `cloudcompass/analysis.py` - savings, risk, shadow-price, and decision-memo logic
+- `cloudcompass/cli.py` - terminal demo and JSON export
+- `cloudcompass/dashboard.py` - Streamlit interface
+- `tests/test_core.py` - smoke tests for the core behavior
 
-### 5. explore data
-python explore_all_skus.py
+## Academic note
 
-python baseline_lpp.py
+The workload is synthetic and deliberately transparent. Replace `generate_workload()` with a real trace adapter when a dataset is available. The project is intended as an educational simulator, not as a live cloud billing estimator.
 
-
-## Acknowledgements
-This project utilizes the **Shaved Ice** compute resource commitment dataset released by Snowflake researchers[cite: 6]. 
-- Original Paper: *Shaved Ice: Optimal Compute Resource Commitments for Dynamic Multi-Cloud Workloads* (ICPE '25).
-- Dataset Link: [Zenodo / GitHub Repository](https://github.com/Snowflake-Labs/shavedice-dataset)[cite: 6].
