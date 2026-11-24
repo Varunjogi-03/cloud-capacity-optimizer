@@ -1,8 +1,11 @@
+from dataclasses import replace
+from pathlib import Path
+
 import pandas as pd
 
 from cloudcompass.analysis import build_decision_memo, rank_bottlenecks
 from cloudcompass.config import DEFAULT_PROVIDERS
-from cloudcompass.data import WorkloadConfig, generate_workload
+from cloudcompass.data import WorkloadConfig, generate_workload, load_shaved_ice_trace
 from cloudcompass.optimizer import compare_providers, optimize_capacity
 from cloudcompass.scenarios import evaluate_scenario, stress_test
 
@@ -34,3 +37,25 @@ def test_stress_and_memo_are_populated():
 def test_provider_comparison_is_ranked():
     frame = compare_providers([8, 12, 18], DEFAULT_PROVIDERS)
     assert list(frame["total_cost"]) == sorted(frame["total_cost"])
+
+
+def test_ladder_changes_cost_and_capacity_over_time():
+    workload = generate_workload(WorkloadConfig(hours=336))
+    four_week = evaluate_scenario(workload, DEFAULT_PROVIDERS[2], cycle_weeks=4)
+    eight_week = evaluate_scenario(workload, DEFAULT_PROVIDERS[2], cycle_weeks=8)
+    assert four_week["actual_cost"] != eight_week["actual_cost"]
+    assert sum(row["capacity"] for row in four_week["ladder"]) == four_week["forecast_commitment"]
+
+
+def test_binding_quota_has_a_shadow_price():
+    workload = generate_workload(WorkloadConfig(hours=48))
+    constrained = replace(DEFAULT_PROVIDERS[2], quota=1)
+    stress = stress_test(workload, constrained)
+    assert (stress["quota_shadow_price"] > 0).any()
+
+
+def test_shaved_ice_trace_adapter_uses_bundled_schema():
+    path = Path(__file__).parents[1] / "dataset" / "hourly_normalized.csv.gz"
+    workload = load_shaved_ice_trace(path, region=1, vm_type="A", hours=24)
+    assert len(workload) == 24
+    assert {"timestamp", "demand", "forecast", "fixed_demand", "flexible_demand"} <= set(workload.columns)

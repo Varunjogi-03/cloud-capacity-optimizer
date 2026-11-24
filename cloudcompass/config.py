@@ -28,3 +28,8 @@ RISK_PROFILES = {
     "conservative": {"quantile": 0.90, "ladder_share": 0.45, "label": "Highest protection / highest cost"},
 }
 
+# Illustrative additional discounts for longer commitment terms. The base
+# committed rate already represents a commitment discount versus on-demand;
+# this small term discount makes the 4/8-week ladder a genuine cost decision.
+LADDER_TERM_DISCOUNTS = {4: 0.00, 8: 0.05}
+

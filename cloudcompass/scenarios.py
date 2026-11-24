@@ -2,37 +2,53 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
-import math
+from dataclasses import replace
 
 import numpy as np
 import pandas as pd
 
-from .config import DEFAULT_PROVIDERS, RISK_PROFILES, Provider
+from .config import LADDER_TERM_DISCOUNTS, RISK_PROFILES, Provider
 from .data import apply_forecast_error, validate_workload
 from .optimizer import OptimizationResult, optimize_capacity
 from .scheduler import schedule_offpeak
 
 
 def make_commitment_ladder(commitment: int, hours: int, cycle_weeks: int, ladder_share: float) -> pd.DataFrame:
-    """Create a small staggered schedule that is easy to explain in a viva."""
+    """Split a commitment into four blocks with genuinely staggered expiries."""
     if cycle_weeks not in (4, 8):
         raise ValueError("cycle_weeks must be 4 or 8")
-    blocks = cycle_weeks
+    if commitment < 0:
+        raise ValueError("commitment cannot be negative")
+    blocks = 4
     long_term = int(round(commitment * ladder_share))
     short_term = max(0, commitment - long_term)
+    base_capacity, remainder = divmod(short_term, blocks)
+    weeks_per_block = cycle_weeks / blocks
     rows = []
     for index in range(blocks):
         rows.append({
-            "block": index + 1,
-            "starts_week": index * (cycle_weeks // 2),
-            "expires_week": (index + 1) * (cycle_weeks // 2),
-            "capacity": int(round(short_term / blocks)) if short_term else 0,
+            "block": f"ladder {index + 1}",
+            "starts_week": 0,
+            "expires_week": (index + 1) * weeks_per_block,
+            "capacity": base_capacity + (1 if index < remainder else 0),
             "type": "staggered",
         })
     rows.insert(0, {"block": "core", "starts_week": 0, "expires_week": cycle_weeks,
                     "capacity": long_term, "type": "core commitment"})
     return pd.DataFrame(rows)
+
+
+def ladder_capacity_by_hour(ladder: pd.DataFrame, hours: int) -> np.ndarray:
+    """Return committed capacity available in each hour before blocks expire."""
+    if hours <= 0:
+        raise ValueError("hours must be positive")
+    capacity = np.zeros(hours, dtype=int)
+    for row in ladder.itertuples(index=False):
+        start = max(0, int(round(float(row.starts_week) * 7 * 24)))
+        end = min(hours, int(round(float(row.expires_week) * 7 * 24)))
+        if end > start:
+            capacity[start:end] += int(row.capacity)
+    return capacity
 
 
 def evaluate_scenario(workload: pd.DataFrame, provider: Provider, error_percent: int = 0,
@@ -49,17 +65,19 @@ def evaluate_scenario(workload: pd.DataFrame, provider: Provider, error_percent:
     # users buy a small buffer, while aggressive users accept more spillover.
     risk_bias = {"aggressive": -0.08, "balanced": 0.0, "conservative": 0.10}[risk]
     target = np.maximum(1, np.rint(forecast * (1 + risk_bias))).astype(int)
-    plan: OptimizationResult = optimize_capacity(target, provider)
-    scheduled = schedule_offpeak(workload, pd.Series(plan.commitment, index=workload.index)) if offpeak else workload.copy()
+    term_discount = LADDER_TERM_DISCOUNTS[cycle_weeks]
+    priced_provider = replace(provider, committed_rate=provider.committed_rate * (1 - term_discount))
+    plan: OptimizationResult = optimize_capacity(target, priced_provider)
+    ladder = make_commitment_ladder(plan.commitment, len(workload), cycle_weeks, profile["ladder_share"])
+    committed_capacity = ladder_capacity_by_hour(ladder, len(workload))
+    scheduled = schedule_offpeak(workload, pd.Series(committed_capacity, index=workload.index)) if offpeak else workload.copy()
     if not offpeak:
         scheduled["scheduled_demand"] = scheduled["demand"]
     evaluated_demand = scheduled["scheduled_demand"].to_numpy() if offpeak else workload["demand"].to_numpy()
-    actual_on_demand = np.maximum(evaluated_demand - plan.commitment, 0)
-    actual_cost = plan.commitment * len(workload) * provider.committed_rate + float(
-        actual_on_demand.sum() * provider.on_demand_rate
-    )
+    actual_on_demand = np.maximum(evaluated_demand - committed_capacity, 0)
+    committed_cost = float(committed_capacity.sum() * priced_provider.committed_rate)
+    actual_cost = committed_cost + float(actual_on_demand.sum() * provider.on_demand_rate)
     baseline_cost = float(workload["demand"].sum() * provider.on_demand_rate)
-    ladder = make_commitment_ladder(plan.commitment, len(workload), cycle_weeks, profile["ladder_share"])
     return {
         "provider": provider.name,
         "region": provider.region,
@@ -69,6 +87,9 @@ def evaluate_scenario(workload: pd.DataFrame, provider: Provider, error_percent:
         "cycle_weeks": cycle_weeks,
         "offpeak": offpeak,
         "forecast_commitment": plan.commitment,
+        "committed_capacity_hours": int(committed_capacity.sum()),
+        "committed_cost": round(committed_cost, 2),
+        "term_discount_percent": round(term_discount * 100, 1),
         "actual_cost": round(actual_cost, 2),
         "baseline_cost": round(baseline_cost, 2),
         "savings": round(baseline_cost - actual_cost, 2),

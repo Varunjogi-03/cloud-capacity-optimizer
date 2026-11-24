@@ -164,14 +164,15 @@ class BaselineCapacityOptimizer:
                     f"RegQuota_r{r}_t{t}",
                 )
 
-        # 4. Solve with CBC (PuLP 4.x uses COIN_CMD and returns LpSolveStats)
+        # 4. Solve with PuLP's bundled CBC executable. COIN_CMD depends on a
+        # system-wide cbc.exe and fails in a normal virtual environment.
         solver_kwargs: Dict[str, object] = {"msg": solver_msg}
         if time_limit_sec is not None:
             solver_kwargs["timeLimit"] = time_limit_sec
-        solver = pulp.COIN_CMD(**solver_kwargs)
+        solver = pulp.PULP_CBC_CMD(**solver_kwargs)
 
-        stats = prob.solve(solver)
-        status = stats.status_str
+        prob.solve(solver)
+        status = pulp.LpStatus.get(prob.status, str(prob.status))
 
         if status != "Optimal":
             raise RuntimeError(
@@ -228,8 +229,7 @@ class BaselineCapacityOptimizer:
         # Shadow prices are valid only when solving the LP relaxation (relax=True)
         shadow_prices: Dict[str, float] = {}
         if relax:
-            for constraint in prob.constraints():
-                name = constraint.name or ""
+            for name, constraint in prob.constraints.items():
                 if (name.startswith("RegQuota_") or name.startswith("VMQuota_")) and constraint.pi:
                     if abs(constraint.pi) > 1e-6:
                         shadow_prices[name] = float(constraint.pi)

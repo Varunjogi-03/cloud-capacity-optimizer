@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 import math
 import random
 
@@ -102,6 +103,70 @@ def load_trace_csv(path: str, demand_column: str = "demand", hours: int | None =
     result["day_of_week"] = result["timestamp"].dt.dayofweek
     result["forecast"] = result["demand"].rolling(6, min_periods=1).mean().round().clip(lower=1).astype(int)
     result["flexible_demand"] = (result["demand"] * 0.22).round().astype(int)
+    result["fixed_demand"] = result["demand"] - result["flexible_demand"]
+    validate_workload(result)
+    return result
+
+
+SHAVED_ICE_COLUMNS = ("USAGE_HOUR", "REGION_NUM", "INSTANCE_TYPE", "NORM_USAGE")
+
+
+def shaved_ice_series(path: str | Path) -> tuple[list[int], list[str]]:
+    """Return the available region and VM-type choices in a Shaved Ice CSV."""
+    frame = pd.read_csv(path, compression="infer", usecols=["REGION_NUM", "INSTANCE_TYPE"])
+    regions = sorted(int(value) for value in frame["REGION_NUM"].dropna().unique())
+    vm_types = sorted(str(value) for value in frame["INSTANCE_TYPE"].dropna().unique())
+    return regions, vm_types
+
+
+def load_shaved_ice_trace(
+    path: str | Path,
+    region: int,
+    vm_type: str,
+    hours: int | None = None,
+    start_hour: int = 0,
+    flexible_fraction: float = 0.22,
+) -> pd.DataFrame:
+    """Adapt one real Shaved Ice region/VM series to the dashboard schema.
+
+    The public trace is normalized, so the resulting units are normalized VM
+    units too. Missing timestamps are filled with zero demand to retain the
+    actual time horizon and to account for idle commitment periods.
+    """
+    if start_hour < 0:
+        raise ValueError("start_hour cannot be negative")
+    if not 0 <= flexible_fraction <= 1:
+        raise ValueError("flexible_fraction must be between 0 and 1")
+
+    frame = pd.read_csv(path, compression="infer", usecols=list(SHAVED_ICE_COLUMNS))
+    frame = frame[
+        (frame["REGION_NUM"] == int(region))
+        & (frame["INSTANCE_TYPE"].astype(str) == str(vm_type))
+    ].copy()
+    if frame.empty:
+        raise ValueError(f"No Shaved Ice trace exists for region {region}, VM type {vm_type}.")
+
+    frame["USAGE_HOUR"] = pd.to_datetime(frame["USAGE_HOUR"], errors="coerce")
+    frame["NORM_USAGE"] = pd.to_numeric(frame["NORM_USAGE"], errors="coerce").fillna(0).clip(lower=0)
+    frame = (
+        frame.dropna(subset=["USAGE_HOUR"])
+        .groupby("USAGE_HOUR", as_index=True)["NORM_USAGE"]
+        .sum()
+        .sort_index()
+    )
+    full_hours = pd.date_range(frame.index.min(), frame.index.max(), freq="h")
+    frame = frame.reindex(full_hours, fill_value=0).iloc[start_hour:]
+    if hours is not None:
+        frame = frame.iloc[:hours]
+    if frame.empty:
+        raise ValueError("The selected Shaved Ice window contains no hours.")
+
+    result = pd.DataFrame({"timestamp": frame.index, "demand": np.rint(frame.to_numpy()).astype(int)})
+    result["hour_index"] = range(len(result))
+    result["hour"] = result["timestamp"].dt.hour
+    result["day_of_week"] = result["timestamp"].dt.dayofweek
+    result["forecast"] = result["demand"].rolling(24, min_periods=1).mean().round().clip(lower=1).astype(int)
+    result["flexible_demand"] = (result["demand"] * flexible_fraction).round().astype(int)
     result["fixed_demand"] = result["demand"] - result["flexible_demand"]
     validate_workload(result)
     return result

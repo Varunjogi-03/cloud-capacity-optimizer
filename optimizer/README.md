@@ -63,11 +63,7 @@ $$R^*_{r,v} = F^{-1}_{D_{r,v}}\!\left(1 - \frac{c^{\text{res}}_{r,v}}{c^{\text{o
 
 ## Key Engineering Updates Made During Phase 2
 
-* **PuLP 4.x Compatibility Migration:** Updated the solver implementation from legacy PuLP 2.x/3.x conventions to the PuLP 4.x API:
-  * Created decision variables via `prob.add_variable(...)` instead of standalone `pulp.LpVariable(...)`.
-  * Switched the solver backend from `pulp.PULP_CBC_CMD` to `pulp.COIN_CMD`.
-  * Updated solve status retrieval to read `stats.status_str` from the `LpSolveStats` return object.
-  * Updated constraint iteration to use the `prob.constraints()` method for shadow price extraction.
+* **Portable CBC execution:** Uses `pulp.PULP_CBC_CMD`, which invokes the CBC executable bundled with PuLP. This avoids requiring a separate system-wide `cbc.exe` installation.
 * **Column-Order-Safe Ingestion:** Replaced positional `itertuples` indexing with explicit column selection via NumPy arrays so input files work regardless of CSV column ordering.
 
 ---

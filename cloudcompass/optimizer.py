@@ -73,11 +73,12 @@ def optimize_capacity(demand: Iterable[float], provider: Provider) -> Optimizati
                                   (od + commitment).tolist(), 0.0, 0.0, "quantile fallback")
 
     model = pulp.LpProblem("CloudCompass_Commitment", pulp.LpMinimize)
-    commitment = pulp.LpVariable("committed_capacity", lowBound=0, upBound=provider.quota, cat="Integer")
+    commitment = pulp.LpVariable("committed_capacity", lowBound=0, cat="Integer")
     on_demand = [pulp.LpVariable(f"on_demand_{h}", lowBound=0, cat="Integer") for h in range(hours)]
     model += commitment * hours * provider.committed_rate + pulp.lpSum(
         item * provider.on_demand_rate for item in on_demand
     )
+    model += commitment <= provider.quota, "quota"
     for h, target in enumerate(values):
         model += commitment + on_demand[h] >= int(target), f"demand_{h}"
     model.solve(pulp.PULP_CBC_CMD(msg=False))
@@ -90,7 +91,7 @@ def optimize_capacity(demand: Iterable[float], provider: Provider) -> Optimizati
     on_demand_cost = float(sum(od) * provider.on_demand_rate)
 
     relaxed = pulp.LpProblem("CloudCompass_ShadowPrices", pulp.LpMinimize)
-    relaxed_commitment = pulp.LpVariable("committed_capacity", lowBound=0, upBound=provider.quota)
+    relaxed_commitment = pulp.LpVariable("committed_capacity", lowBound=0)
     relaxed_od = [pulp.LpVariable(f"on_demand_{h}", lowBound=0) for h in range(hours)]
     relaxed += relaxed_commitment * hours * provider.committed_rate + pulp.lpSum(
         item * provider.on_demand_rate for item in relaxed_od

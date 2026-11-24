@@ -11,6 +11,11 @@ def rank_bottlenecks(stress: pd.DataFrame) -> list[dict]:
         return []
     latest = stress.iloc[stress["error_percent"].abs().argmax()]
     bottlenecks = []
+    max_quota_shadow = float(stress["quota_shadow_price"].max())
+    if max_quota_shadow > 1e-6:
+        binding = stress.loc[stress["quota_shadow_price"].idxmax()]
+        bottlenecks.append({"name": "Binding commitment quota", "severity": "high",
+                            "evidence": f"One additional committed unit is worth ${max_quota_shadow:.4f} per hour in the {int(binding['error_percent']):+d}% forecast case."})
     if float(latest["quota_utilization"]) >= 80:
         bottlenecks.append({"name": "Provider quota", "severity": "high",
                             "evidence": f"{latest['quota_utilization']:.1f}% of quota is committed."})
