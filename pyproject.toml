@@ -7,7 +7,7 @@ name = "cloudcompass"
 version = "0.1.0"
 description = "Risk-aware cloud commitment and capacity simulator"
 requires-python = ">=3.10"
-dependencies = ["pulp>=2.8", "pandas>=2.0", "numpy>=1.24"]
+dependencies = ["pulp>=2.8,<4", "pandas>=2.0", "numpy>=1.24"]
 
 [project.scripts]
 cloudcompass = "cloudcompass.cli:main"
